@@ -85,11 +85,25 @@ $insert_peer->execute(['peerid'=>$peerid,'user_agent'=>$user_agent,'ipaddress'=>
 
 $pk_peer = $dbh->lastInsertId();
 
-$insert_torrent=$dbh->prepare("INSERT INTO `torrent` (`hash`) VALUES (:infohash) "
- 	. "ON DUPLICATE KEY UPDATE `id` = LAST_INSERT_ID(`id`)"); // ON DUPLICATE KEY UPDATE is just to make mysql_insert_id work
-
-$insert_torrent->execute(['infohash'=>$info_hash]);
-$pk_torrent = $dbh->lastInsertId();
+// create tracker only if IP is allowed
+$pk_torrent=null;
+if(in_array($ipadress,__IP_ALLOWLIST)){
+	$insert_torrent=$dbh->prepare("INSERT INTO `torrent` (`hash`) VALUES (:infohash) "
+ 		. "ON DUPLICATE KEY UPDATE `id` = LAST_INSERT_ID(`id`)"); // ON DUPLICATE KEY UPDATE is just to make mysql_insert_id work
+	$insert_torrent->execute(['infohash'=>$info_hash]);
+	$pk_torrent = $dbh->lastInsertId();
+} else {
+	$select_torrent=$dbh->prepare('SELECT id FROM torrent WHERE hash = :infohash');
+	$select_torrent->execute(['infohash'=>$info_hash ]);
+	$r=$select_torrent->fetch(); 
+	if($r){
+		$pk_torrent=$r['id'];
+	}
+}
+if(!$pk_torrent){
+	header('HTTP/1.0 403 Forbidden');
+	echo 'Tracker creation forbidden.';
+}
 
 $params=['pkpeer'=>$pk_peer,'uploaded'=>$uploaded,'downloaded'=>$downloaded,'left'=>$left,'infohash'=>$info_hash];
 $state = 'state';
